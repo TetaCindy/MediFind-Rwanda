@@ -1,138 +1,105 @@
 # MediFind Rwanda 🇷🇼
 ### Real-Time Medication Stock Tracker
-*African Leadership University — School of Software Engineering*
-*Prepared by: TETA SARO Cindy*
+*African Leadership University | Prepared by: TETA SARO Cindy*
 
 ---
 
-## Project Structure
+## Quick Start
 
-```
-MediFind-Rwanda/
-├── frontend/                  # React frontend
-│   └── src/
-│       └── pages/
-│           ├── PatientSearch.jsx        # Patient drug search page
-│           ├── PatientAccount.jsx       # Patient account & watch list
-│           ├── FacilityDashboard.jsx    # Staff inventory dashboard
-│           ├── FacilityRegistration.jsx # Facility onboarding form
-│           └── AdminPanel.jsx           # System admin panel
-│
-└── backend/                   # Node.js + Express API
-    ├── src/
-    │   ├── index.js                     # Server entry point
-    │   ├── config/
-    │   │   └── db.js                    # PostgreSQL connection
-    │   ├── middleware/
-    │   │   └── auth.js                  # JWT verification & role guards
-    │   ├── routes/
-    │   │   ├── auth.js                  # Auth endpoints
-    │   │   └── drugs.js                 # Drug search endpoints
-    │   └── services/
-    │       ├── authService.js           # Auth business logic
-    │       └── drugService.js           # Drug search business logic
-    ├── migrations/
-    │   ├── 001_schema.sql               # Full database schema (9 tables)
-    │   └── run.js                       # Migration runner
-    ├── seeds/
-    │   ├── 001_seed.sql                 # Rwanda Essential Medicines + test data
-    │   └── run.js                       # Seed runner
-    ├── .env.example                     # Environment variables template
-    └── package.json                     # Dependencies
-```
-
----
-
-## Getting Started
-
-### 1. Backend Setup
-
+### 1. Backend
 ```bash
 cd backend
 npm install
-cp .env.example .env       # Fill in your real values
-npm run migrate            # Create all database tables
-npm run seed               # Insert medicines + test data
-npm run dev                # Start dev server on port 5000
+cp .env.example .env     # Fill in your values
+npm run migrate          # Create all 9 database tables
+npm run seed             # Insert 30 medicines + test facilities
+npm run dev              # Start API on port 5000
 ```
 
-### 2. Frontend Setup
-
+### 2. Frontend
 ```bash
 cd frontend
 npm install
-npm start                  # Start React dev server on port 3000
+npm start                # Open React app on port 3000
 ```
 
-### 3. Database Setup (PostgreSQL)
-
+### 3. Database (PostgreSQL + PostGIS required)
 ```sql
 CREATE DATABASE medifind_rwanda;
-CREATE USER medifind_user WITH PASSWORD 'your_password';
+CREATE USER medifind_user WITH PASSWORD 'yourpassword';
 GRANT ALL PRIVILEGES ON DATABASE medifind_rwanda TO medifind_user;
-```
-
-Also install PostgreSQL extensions:
-```sql
+\c medifind_rwanda
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
 ```
 
 ---
 
-## API Endpoints Built So Far
-
-### Auth (`/api/auth`)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/patient/register` | Register new patient |
-| POST | `/patient/login` | Patient login |
-| POST | `/staff/login` | Facility staff login |
-| POST | `/admin/login` | Admin login |
-| POST | `/otp/send` | Send OTP via SMS |
-| POST | `/otp/verify` | Verify OTP code |
-| POST | `/password/reset` | Reset password |
-| GET  | `/me` | Get current user profile |
-
-### Drugs (`/api/drugs`)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Full master drug list |
-| GET | `/search?q=amox` | Autocomplete search (EN + KIN) |
-| GET | `/:id/facilities?lat=&lng=` | Nearby facilities with stock |
-| GET | `/:id/summary` | Availability summary |
-
-### Coming Next
-- `POST /api/inventory` — Inventory Management API
-- `POST /api/notifications` — Notifications API
-- `POST /api/admin` — Admin API
+## MTN SMS Sandbox Setup
+1. Go to https://developers.mtn.com
+2. Sign up → My Apps → Create New App → Subscribe to SMS API
+3. Copy your API Key, API Secret, Subscription Key
+4. Add to your .env file:
+   MTN_API_KEY=your_key
+   MTN_API_SECRET=your_secret
+   MTN_SUBSCRIPTION_KEY=your_subscription_key
+5. Change NODE_ENV=production in .env to enable real SMS sending
+   (In development mode, SMS messages are logged to the console only)
 
 ---
 
-## Database Tables
+## All API Endpoints
 
-| Table | Purpose |
-|-------|---------|
-| `users` | Patients and admins |
-| `facilities` | Registered pharmacies, clinics, hospitals |
-| `facility_staff` | Staff accounts per facility |
-| `drugs` | Master medicines list (EN + Kinyarwanda) |
-| `inventory` | Drug stock per facility — core table |
-| `inventory_audit_log` | Every stock change (NFR 15 compliance) |
-| `watch_list` | Patients watching out-of-stock drugs |
-| `notifications` | SMS/push notification history |
-| `otp_codes` | Phone verification codes |
+### Auth (/api/auth)
+| POST | /patient/register    | Register patient         |
+| POST | /patient/login       | Patient login            |
+| POST | /staff/login         | Staff login              |
+| POST | /admin/login         | Admin login              |
+| POST | /facility/register   | Register new facility    |
+| POST | /otp/send            | Send OTP via SMS         |
+| POST | /otp/verify          | Verify OTP               |
+| POST | /password/reset      | Reset password           |
+| GET  | /me                  | Get current profile      |
+
+### Drugs (/api/drugs)
+| GET  | /                    | All drugs                |
+| GET  | /search?q=           | Autocomplete search      |
+| GET  | /:id/facilities      | Nearby facilities        |
+| GET  | /:id/summary         | Availability summary     |
+
+### Inventory (/api/inventory) — Staff only
+| GET  | /                    | Facility inventory       |
+| POST | /                    | Add drug to inventory    |
+| PATCH| /:id                 | Update stock             |
+| PATCH| /:id/out-of-stock    | Mark out of stock        |
+| GET  | /audit               | Audit log                |
+
+### Notifications (/api/notifications)
+| POST  | /watch              | Watch a drug             |
+| DELETE| /watch/:drugId      | Unwatch a drug           |
+| GET   | /watch              | Patient watch list       |
+| GET   | /                   | Patient notifications    |
+| GET   | /facility           | Facility alerts          |
+
+### Admin (/api/admin) — Admin only
+| GET  | /facilities          | All facilities           |
+| PATCH| /facilities/:id/approve | Approve facility      |
+| PATCH| /facilities/:id/reject  | Reject facility       |
+| PATCH| /facilities/:id/status  | Enable/disable        |
+| GET  | /analytics           | System analytics         |
+| POST | /drugs               | Add drug to master list  |
+| PATCH| /drugs/:id           | Edit drug                |
+| PATCH| /drugs/:id/status    | Activate/deactivate drug |
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React.js (PWA) |
-| Backend | Node.js + Express |
-| Database | PostgreSQL + PostGIS |
-| Auth | JWT + bcrypt |
-| SMS | MTN Rwanda / Airtel Rwanda API |
-| Maps | Google Maps / OpenStreetMap |
-| Hosting | Cloud — East Africa region |
+## SMS Triggers
+| Event                        | Recipient  | Message                              |
+|------------------------------|------------|--------------------------------------|
+| Patient registers            | Patient    | Welcome SMS                          |
+| OTP request                  | Any user   | 6-digit code, valid 10 mins          |
+| Stock drops to threshold     | Facility   | Low stock alert with quantity        |
+| Stock hits zero              | Facility   | Out of stock alert                   |
+| Drug back in stock           | Patients   | Availability alert with distance     |
+| Facility approved            | Staff      | Approval confirmation                |
+| Facility rejected            | Staff      | Rejection notice                     |

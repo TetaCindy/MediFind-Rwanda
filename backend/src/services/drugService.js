@@ -76,6 +76,8 @@ const findFacilitiesWithDrug = async ({
        f.phone,
        f.operating_hours,
        f.district,
+       ST_Y(f.location::geometry) AS latitude,
+       ST_X(f.location::geometry) AS longitude,
        i.quantity,
        i.status,
        i.updated_at           AS last_updated,

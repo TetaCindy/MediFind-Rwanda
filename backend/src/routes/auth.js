@@ -3,173 +3,103 @@ const router = express.Router();
 const authService = require("../services/authService");
 const { authenticate } = require("../middleware/auth");
 
-// ── Input validation helper ───────────────────────────────────────────────────
 const validate = (fields, body) => {
   const missing = fields.filter((f) => !body[f]);
-  if (missing.length > 0) {
-    return `Missing required fields: ${missing.join(", ")}`;
-  }
-  return null;
+  return missing.length > 0 ? `Missing required fields: ${missing.join(", ")}` : null;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/patient/register
-//  Public — register a new patient account
-// ─────────────────────────────────────────────────────────────────────────────
+// Patient register
 router.post("/patient/register", async (req, res) => {
   const error = validate(["phone", "password", "fullName"], req.body);
   if (error) return res.status(400).json({ error });
-
-  const { phone, email, password, fullName } = req.body;
-
-  if (password.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters." });
-  }
-
+  if (req.body.password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
   try {
-    const result = await authService.registerPatient({ phone, email, password, fullName });
-    return res.status(201).json({
-      message: "Patient account created successfully.",
-      user: result.user,
-      token: result.token,
-    });
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
+    const result = await authService.registerPatient(req.body);
+    return res.status(201).json({ message: "Account created.", user: result.user, token: result.token });
+  } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/patient/login
-//  Public — patient login
-// ─────────────────────────────────────────────────────────────────────────────
+// Patient login
 router.post("/patient/login", async (req, res) => {
   const error = validate(["phone", "password"], req.body);
   if (error) return res.status(400).json({ error });
-
   try {
     const result = await authService.loginPatient(req.body);
-    return res.status(200).json({
-      message: "Login successful.",
-      user: result.user,
-      token: result.token,
-    });
-  } catch (err) {
-    return res.status(401).json({ error: err.message });
-  }
+    return res.status(200).json({ message: "Login successful.", user: result.user, token: result.token });
+  } catch (err) { return res.status(401).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/staff/login
-//  Public — facility staff login
-// ─────────────────────────────────────────────────────────────────────────────
+// Staff login
 router.post("/staff/login", async (req, res) => {
   const error = validate(["phone", "password"], req.body);
   if (error) return res.status(400).json({ error });
-
   try {
     const result = await authService.loginStaff(req.body);
-    return res.status(200).json({
-      message: "Staff login successful.",
-      staff: result.staff,
-      token: result.token,
-    });
-  } catch (err) {
-    return res.status(401).json({ error: err.message });
-  }
+    return res.status(200).json({ message: "Staff login successful.", staff: result.staff, token: result.token });
+  } catch (err) { return res.status(401).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/admin/login
-//  Public — admin login
-// ─────────────────────────────────────────────────────────────────────────────
+// Admin login
 router.post("/admin/login", async (req, res) => {
   const error = validate(["phone", "password"], req.body);
   if (error) return res.status(400).json({ error });
-
   try {
     const result = await authService.loginAdmin(req.body);
-    return res.status(200).json({
-      message: "Admin login successful.",
-      user: result.user,
-      token: result.token,
-    });
-  } catch (err) {
-    return res.status(401).json({ error: err.message });
-  }
+    return res.status(200).json({ message: "Admin login successful.", user: result.user, token: result.token });
+  } catch (err) { return res.status(401).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/otp/send
-//  Public — send OTP to phone for verification or password reset
-// ─────────────────────────────────────────────────────────────────────────────
+// ── FACILITY REGISTRATION ─────────────────────────────────────────────────────
+router.post("/facility/register", async (req, res) => {
+  const required = ["facilityName","facilityType","licenseNumber","operatingHours","district","address","phone","adminName","adminPhone","password"];
+  const error = validate(required, req.body);
+  if (error) return res.status(400).json({ error });
+  if (req.body.password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
+  try {
+    const result = await authService.registerFacility(req.body);
+    return res.status(201).json(result);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+
+// OTP send
 router.post("/otp/send", async (req, res) => {
   const error = validate(["phone", "purpose"], req.body);
   if (error) return res.status(400).json({ error });
-
-  const { phone, purpose } = req.body;
-  if (!["registration", "password_reset"].includes(purpose)) {
-    return res.status(400).json({ error: "Invalid purpose. Use 'registration' or 'password_reset'." });
-  }
-
+  if (!["registration","password_reset"].includes(req.body.purpose)) return res.status(400).json({ error: "Invalid purpose." });
   try {
-    const result = await authService.sendOTP({ phone, purpose });
+    const result = await authService.sendOTP(req.body);
     return res.status(200).json(result);
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/otp/verify
-//  Public — verify an OTP code
-// ─────────────────────────────────────────────────────────────────────────────
+// OTP verify
 router.post("/otp/verify", async (req, res) => {
   const error = validate(["phone", "code", "purpose"], req.body);
   if (error) return res.status(400).json({ error });
-
   try {
     const result = await authService.verifyOTP(req.body);
     return res.status(200).json(result);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
+  } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/password/reset
-//  Public — reset password after OTP verified
-// ─────────────────────────────────────────────────────────────────────────────
+// Password reset
 router.post("/password/reset", async (req, res) => {
   const error = validate(["phone", "newPassword"], req.body);
   if (error) return res.status(400).json({ error });
-
-  if (req.body.newPassword.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters." });
-  }
-
+  if (req.body.newPassword.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
   try {
     const result = await authService.resetPassword(req.body);
     return res.status(200).json(result);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
+  } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  GET /api/auth/me
-//  Protected — get the currently logged-in user's profile
-// ─────────────────────────────────────────────────────────────────────────────
+// Get current user profile
 router.get("/me", authenticate, async (req, res) => {
   try {
-    const profile = await authService.getProfile({
-      userId: req.user.id,
-      role: req.user.role,
-    });
+    const profile = await authService.getProfile({ userId: req.user.id, role: req.user.role });
     if (!profile) return res.status(404).json({ error: "Profile not found." });
     return res.status(200).json({ profile });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
