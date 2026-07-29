@@ -6,6 +6,11 @@ require("dotenv").config();
 
 const app = express();
 
+// Render (and most hosts) sit behind a proxy, so Express needs to trust
+// the X-Forwarded-For header it sets. Without this, express-rate-limit
+// throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set("trust proxy", 1);
+
 // ── Security middleware ───────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL || "*" }));
