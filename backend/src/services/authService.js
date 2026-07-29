@@ -18,7 +18,7 @@ const registerPatient = async ({ phone, email, password, fullName }) => {
   );
   const user = result.rows[0];
   // Send welcome SMS
-  await sendSMS(phone, messages.welcomePatient(fullName));
+  sendSMS(phone, messages.welcomePatient(fullName)).catch(() => {}); // fire-and-forget — don't block account creation on SMS
   return { user, token: signPatientToken(user) };
 };
 
