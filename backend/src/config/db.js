@@ -7,6 +7,9 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user:     process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  // Render (and most managed Postgres hosts) require SSL. Leave DB_SSL unset
+  // for local development, where Postgres usually isn't configured for TLS.
+  ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
   // Keep connections alive in production
   max: 10,
   idleTimeoutMillis: 30000,
