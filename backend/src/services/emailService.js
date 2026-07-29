@@ -1,22 +1,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  MediFind Rwanda — Email Service (Resend HTTP API)
+//  MediFind Rwanda — Email Service (Brevo HTTP API)
 //  Used to deliver real OTP codes to a patient's email address.
-//  Switched from SMTP (Nodemailer) to Resend because cloud hosts like Render
-//  block or throttle outbound SMTP ports (465/587), causing timeouts.
-//  Resend sends over regular HTTPS, which is never blocked.
+//  Uses Brevo because it only requires verifying a single sender address
+//  (via a confirmation email link) rather than a full domain + DNS records,
+//  so it works immediately without waiting on DNS propagation.
 // ─────────────────────────────────────────────────────────────────────────────
 require("dotenv").config();
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-// While your own domain isn't verified on Resend yet, use their shared test
-// sender. Once you verify a domain at resend.com/domains, switch this to
-// something like "MediFind Rwanda <no-reply@yourdomain.com>".
-const FROM_ADDRESS = process.env.EMAIL_FROM || "MediFind Rwanda <onboarding@resend.dev>";
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+// Must be the exact email address you verified as a Sender in Brevo.
+const FROM_EMAIL = process.env.EMAIL_FROM || "";
+const FROM_NAME = "MediFind Rwanda";
 
 // ── Send an email ──────────────────────────────────────────────────────────
 const sendEmail = async (to, subject, html) => {
   // Dev mode / missing credentials — log only, no real email
-  if (process.env.NODE_ENV !== "production" || !RESEND_API_KEY) {
+  if (process.env.NODE_ENV !== "production" || !BREVO_API_KEY || !FROM_EMAIL) {
     console.log(`📧  [EMAIL - DEV MODE]`);
     console.log(`   To:      ${to}`);
     console.log(`   Subject: ${subject}`);
@@ -25,28 +24,29 @@ const sendEmail = async (to, subject, html) => {
   }
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "api-key": BREVO_API_KEY,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to,
+        sender: { name: FROM_NAME, email: FROM_EMAIL },
+        to: [{ email: to }],
         subject,
-        html,
+        htmlContent: html,
       }),
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || `Resend API error (status ${response.status})`);
+      throw new Error(data.message || `Brevo API error (status ${response.status})`);
     }
 
-    console.log(`✅  Email sent to ${to} (${data.id})`);
-    return { status: "sent", messageId: data.id };
+    console.log(`✅  Email sent to ${to} (${data.messageId})`);
+    return { status: "sent", messageId: data.messageId };
   } catch (err) {
     // Never crash the app if email fails
     console.error(`❌  Email failed to ${to}:`, err.message);
