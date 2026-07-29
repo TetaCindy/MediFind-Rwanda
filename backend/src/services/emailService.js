@@ -1,32 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  MediFind Rwanda — Email Service (Gmail SMTP via Nodemailer)
+//  MediFind Rwanda — Email Service (Resend HTTP API)
 //  Used to deliver real OTP codes to a patient's email address.
+//  Switched from SMTP (Nodemailer) to Resend because cloud hosts like Render
+//  block or throttle outbound SMTP ports (465/587), causing timeouts.
+//  Resend sends over regular HTTPS, which is never blocked.
 // ─────────────────────────────────────────────────────────────────────────────
 require("dotenv").config();
-const nodemailer = require("nodemailer");
 
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD;
-
-let transporter = null;
-if (EMAIL_USER && EMAIL_APP_PASSWORD) {
-  transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    family: 4,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_APP_PASSWORD,
-    },
-  });
-}
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// While your own domain isn't verified on Resend yet, use their shared test
+// sender. Once you verify a domain at resend.com/domains, switch this to
+// something like "MediFind Rwanda <no-reply@yourdomain.com>".
+const FROM_ADDRESS = process.env.EMAIL_FROM || "MediFind Rwanda <onboarding@resend.dev>";
 
 // ── Send an email ──────────────────────────────────────────────────────────
 const sendEmail = async (to, subject, html) => {
   // Dev mode / missing credentials — log only, no real email
-  if (process.env.NODE_ENV !== "production" || !transporter) {
+  if (process.env.NODE_ENV !== "production" || !RESEND_API_KEY) {
     console.log(`📧  [EMAIL - DEV MODE]`);
     console.log(`   To:      ${to}`);
     console.log(`   Subject: ${subject}`);
@@ -35,14 +25,28 @@ const sendEmail = async (to, subject, html) => {
   }
 
   try {
-    const info = await transporter.sendMail({
-      from: `"MediFind Rwanda" <${EMAIL_USER}>`,
-      to,
-      subject,
-      html,
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: FROM_ADDRESS,
+        to,
+        subject,
+        html,
+      }),
     });
-    console.log(`✅  Email sent to ${to} (${info.messageId})`);
-    return { status: "sent", messageId: info.messageId };
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || `Resend API error (status ${response.status})`);
+    }
+
+    console.log(`✅  Email sent to ${to} (${data.id})`);
+    return { status: "sent", messageId: data.id };
   } catch (err) {
     // Never crash the app if email fails
     console.error(`❌  Email failed to ${to}:`, err.message);
