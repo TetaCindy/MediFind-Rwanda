@@ -11,10 +11,11 @@ const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD;
 let transporter = null;
 if (EMAIL_USER && EMAIL_APP_PASSWORD) {
   transporter = nodemailer.createTransport({
-    service: "gmail",
     host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    family: 4,
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_APP_PASSWORD,
