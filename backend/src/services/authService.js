@@ -18,7 +18,7 @@ const registerPatient = async ({ phone, email, password, fullName }) => {
   );
   const user = result.rows[0];
   // Send welcome SMS
-  sendSMS(phone, messages.welcomePatient(fullName)).catch(() => {}); // fire-and-forget — don't block account creation on SMS
+  await sendSMS(phone, messages.welcomePatient(fullName));
   return { user, token: signPatientToken(user) };
 };
 
@@ -115,29 +115,50 @@ const registerFacility = async ({ facilityName, facilityType, licenseNumber, ope
   if (existing.rows.length > 0) throw new Error("A facility with this license number is already registered.");
   const existingStaff = await pool.query("SELECT id FROM facility_staff WHERE phone = $1", [adminPhone]);
   if (existingStaff.rows.length > 0) throw new Error("A staff account with this phone number already exists.");
-
-  let facilityResult;
-  if (latitude && longitude) {
-    facilityResult = await pool.query(
-      `INSERT INTO facilities (name, type, license_number, district, address, phone, operating_hours, location, status) VALUES ($1,$2,$3,$4,$5,$6,$7,ST_GeogFromText('SRID=4326;POINT(' || $8 || ' ' || $9 || ')'),'pending') RETURNING id, name, status`,
-      [facilityName, facilityType, licenseNumber, district, address, phone, operatingHours, longitude, latitude]
-    );
-  } else {
-    facilityResult = await pool.query(
-      `INSERT INTO facilities (name, type, license_number, district, address, phone, operating_hours, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING id, name, status`,
-      [facilityName, facilityType, licenseNumber, district, address, phone, operatingHours]
-    );
+  if (adminEmail) {
+    const existingEmail = await pool.query("SELECT id FROM facility_staff WHERE email = $1", [adminEmail]);
+    if (existingEmail.rows.length > 0) throw new Error("A staff account with this email already exists.");
   }
-  const facility = facilityResult.rows[0];
-  const passwordHash = await bcrypt.hash(password, 10);
-  await pool.query(
-    `INSERT INTO facility_staff (facility_id, phone, email, password_hash, full_name, role) VALUES ($1,$2,$3,$4,$5,'admin')`,
-    [facility.id, adminPhone, adminEmail || null, passwordHash, adminName]
-  );
-  return {
-    message: "Registration submitted! You will receive an SMS once your facility is approved.",
-    facility: { id: facility.id, name: facility.name, status: facility.status },
-  };
+
+  // Both inserts must succeed together — otherwise we'd end up with a
+  // "ghost" facility that has no login account tied to it (a facility row
+  // created, but no matching facility_staff row if the second insert failed).
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    let facilityResult;
+    if (latitude && longitude) {
+      facilityResult = await client.query(
+        `INSERT INTO facilities (name, type, license_number, district, address, phone, operating_hours, location, status) VALUES ($1,$2,$3,$4,$5,$6,$7,ST_GeogFromText('SRID=4326;POINT(' || $8 || ' ' || $9 || ')'),'pending') RETURNING id, name, status`,
+        [facilityName, facilityType, licenseNumber, district, address, phone, operatingHours, longitude, latitude]
+      );
+    } else {
+      facilityResult = await client.query(
+        `INSERT INTO facilities (name, type, license_number, district, address, phone, operating_hours, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING id, name, status`,
+        [facilityName, facilityType, licenseNumber, district, address, phone, operatingHours]
+      );
+    }
+    const facility = facilityResult.rows[0];
+    const passwordHash = await bcrypt.hash(password, 10);
+    await client.query(
+      `INSERT INTO facility_staff (facility_id, phone, email, password_hash, full_name, role) VALUES ($1,$2,$3,$4,$5,'admin')`,
+      [facility.id, adminPhone, adminEmail || null, passwordHash, adminName]
+    );
+
+    await client.query("COMMIT");
+    return {
+      message: "Registration submitted! You will receive an email once your facility is approved.",
+      facility: { id: facility.id, name: facility.name, status: facility.status },
+    };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    // Give a clearer message for the most common real cause (duplicate email slipping past the pre-check in a race)
+    if (err.code === "23505") throw new Error("An account with this phone number or email already exists.");
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 module.exports = { registerPatient, loginPatient, loginStaff, loginAdmin, sendOTP, verifyOTP, resetPassword, getProfile, registerFacility };
