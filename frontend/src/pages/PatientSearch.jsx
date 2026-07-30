@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { notifAPI } from "../api";
+import { useAuth } from "../AuthContext";
 
 // Leaflet's default marker icon paths don't resolve correctly under webpack/CRA —
 // point them at the CDN copies instead of trying to bundle local image assets.
@@ -40,6 +42,10 @@ const T = {
     locating:"Getting your location…",
     noLocation:"Could not get location. Showing all results.",
     guest:"Sign in to get alerts when a medicine becomes available.",
+    notifyMe:"🔔 Notify me when back in stock",
+    stopNotify:"Stop notifications",
+    notifyingMsg:"You'll get an alert when this is back in stock nearby.",
+    notifyPrompt:"Not seeing it in stock? Get notified when it's available nearby.",
   },
   kin: {
     tagline:"Shaka imiti yawe vuba.",
@@ -58,6 +64,10 @@ const T = {
     locating:"Turabona aho uri…",
     noLocation:"Ntawe wabonetse. Turimo kwerekana ibisubizo byose.",
     guest:"Injira kugira ngo ubone imenyesha iyo imiti ibonetse.",
+    notifyMe:"🔔 Menyesha iyo ihari",
+    stopNotify:"Hagarika imenyesha",
+    notifyingMsg:"Uzamenyeshwa iyo iyi miti ibonetse hafi yawe.",
+    notifyPrompt:"Ntabwo ibonetse? Menyeshwa iyo ibonetse hafi yawe.",
   },
 };
 
@@ -176,6 +186,7 @@ function FacilityCard({ f, t }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PatientSearch({ user, onLoginClick, onAccountClick, onLogout }) {
+  const { token } = useAuth();
   const [lang, setLang]           = useState("en");
   const [query, setQuery]         = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -189,7 +200,45 @@ export default function PatientSearch({ user, onLoginClick, onAccountClick, onLo
   const [sortBy, setSortBy]       = useState("distance");
   const [viewMode, setViewMode]   = useState("list");
   const [error, setError]         = useState("");
+  const [watching, setWatching]   = useState(false);
+  const [watchBusy, setWatchBusy] = useState(false);
   const t = T[lang];
+
+  // Check whether the currently selected drug is already on the patient's watch list
+  useEffect(() => {
+    if (!user || !token || !selectedDrug) { setWatching(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await notifAPI.watchList(token);
+        const list = res.watch_list || [];
+        if (!cancelled) setWatching(list.some(w => w.drug_id === selectedDrug.id));
+      } catch { /* silently ignore — not critical to page function */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user, token, selectedDrug]);
+
+  const handleToggleWatch = async () => {
+    if (!selectedDrug) return;
+    setWatchBusy(true);
+    setError("");
+    try {
+      if (watching) {
+        await notifAPI.unwatch(selectedDrug.id, token);
+        setWatching(false);
+      } else {
+        await notifAPI.watch(
+          { drugId: selectedDrug.id, radiusKm: 5, userLat: userPos?.lat, userLng: userPos?.lng },
+          token
+        );
+        setWatching(true);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setWatchBusy(false);
+    }
+  };
 
   // Get user location on load
   useEffect(() => {
@@ -476,6 +525,30 @@ export default function PatientSearch({ user, onLoginClick, onAccountClick, onLo
                   border:"none", borderRadius:8, padding:"5px 14px",
                   fontSize:12, fontWeight:600, cursor:"pointer", flexShrink:0,
                 }}>Sign in</button>
+              </div>
+            )}
+
+            {/* Notify me toggle — logged-in patients only */}
+            {user && selectedDrug && (
+              <div style={{
+                marginTop:20,
+                background: watching ? C.teal[50] : C.gray[50],
+                border:`1px solid ${watching ? C.teal[100] : C.gray[100]}`,
+                borderRadius:10, padding:"12px 16px", fontSize:13,
+                color: watching ? C.teal[600] : C.gray[600],
+                display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
+              }}>
+                <span>🔔</span>
+                <span>{watching ? t.notifyingMsg : t.notifyPrompt}</span>
+                <button onClick={handleToggleWatch} disabled={watchBusy} style={{
+                  marginLeft:"auto",
+                  background: watching ? "transparent" : C.teal[400],
+                  color: watching ? C.teal[600] : "#fff",
+                  border: watching ? `1px solid ${C.teal[400]}` : "none",
+                  borderRadius:8, padding:"5px 14px",
+                  fontSize:12, fontWeight:600,
+                  cursor: watchBusy ? "not-allowed" : "pointer", flexShrink:0,
+                }}>{watchBusy ? "…" : watching ? t.stopNotify : t.notifyMe}</button>
               </div>
             )}
           </>
