@@ -1,28 +1,19 @@
-// Email service (sends OTP codes via Gmail SMTP)
+// Email service (sends OTP codes via Brevo's HTTP API)
+//
+// Note: this uses Brevo's REST API over HTTPS, not SMTP. Render's free
+// tier blocks outbound SMTP ports (25, 465, 587), so a normal SMTP
+// library like nodemailer would time out. Brevo's API runs over port
+// 443, same as any other HTTPS request, so it works on the free tier.
 require("dotenv").config();
-const nodemailer = require("nodemailer");
 
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_APP_PASSWORD = process.env.EMAIL_APP_PASSWORD;
-
-let transporter = null;
-if (EMAIL_USER && EMAIL_APP_PASSWORD) {
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_APP_PASSWORD,
-    },
-  });
-}
+const BREVO_API_KEY     = process.env.BREVO_API_KEY;
+const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL;
+const BREVO_URL = "https://api.brevo.com/v3/smtp/email";
 
 // Send an email
 const sendEmail = async (to, subject, html) => {
   // Dev mode / missing credentials: log only, no real email
-  if (process.env.NODE_ENV !== "production" || !transporter) {
+  if (process.env.NODE_ENV !== "production" || !BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
     console.log(`[EMAIL - DEV MODE]`);
     console.log(`   To:      ${to}`);
     console.log(`   Subject: ${subject}`);
@@ -31,14 +22,28 @@ const sendEmail = async (to, subject, html) => {
   }
 
   try {
-    const info = await transporter.sendMail({
-      from: `"MediFind Rwanda" <${EMAIL_USER}>`,
-      to,
-      subject,
-      html,
+    const res = await fetch(BREVO_URL, {
+      method: "POST",
+      headers: {
+        "api-key": BREVO_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "MediFind Rwanda", email: BREVO_SENDER_EMAIL },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
     });
-    console.log(`Email sent to ${to} (${info.messageId})`);
-    return { status: "sent", messageId: info.messageId };
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || `Brevo API error (${res.status})`);
+    }
+
+    console.log(`Email sent to ${to} (${data.messageId})`);
+    return { status: "sent", messageId: data.messageId };
   } catch (err) {
     // Never crash the app if email fails
     console.error(`Email failed to ${to}:`, err.message);
