@@ -74,7 +74,10 @@ const sendOTP = async ({ phone, email, purpose }) => {
   const code = generateOTP();
   await pool.query("INSERT INTO otp_codes (phone, code, purpose) VALUES ($1, $2, $3)", [phone, code, purpose]);
   const { subject, html } = templates.otp(code);
-  await sendEmail(targetEmail, subject, html);
+  const result = await sendEmail(targetEmail, subject, html);
+  if (result.status === "failed") {
+    throw new Error(`We couldn't send the verification email. Please try again in a moment, or contact support.`);
+  }
   return { message: `OTP sent to ${targetEmail}.` };
 };
 
