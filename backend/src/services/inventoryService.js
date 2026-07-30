@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const { sendSMS, messages } = require("./smsService");
+const { sendEmail, templates } = require("./emailService");
 
 const getFacilityInventory = async ({ facilityId, category, status }) => {
   const conditions = ["i.facility_id = $1", "f.status = 'active'"];
@@ -48,27 +48,32 @@ const updateStock = async ({ facilityId, inventoryId, quantity, lowThreshold, no
 
   await writeAuditLog({ inventoryId, facilityId, drugId:prev.drug_id, staffId, prevQty:prev.quantity, newQty:updated.quantity, prevStatus:prev.status, newStatus:updated.status, note:note||null });
 
-  // Get facility phone for SMS alerts
-  const facility = await pool.query("SELECT phone, name FROM facilities WHERE id = $1", [facilityId]);
+  const facility = await pool.query("SELECT name FROM facilities WHERE id = $1", [facilityId]);
   const fac = facility.rows[0];
 
-  // Low-stock SMS alert to facility (FR 4.1)
+  // Low-stock email alert to facility staff (FR 4.1)
   if (updated.status === "low_stock" && prev.status === "in_stock") {
-    await sendSMS(fac.phone, messages.lowStock(prev.drug_name, updated.quantity, prev.unit));
-    await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, type, channel, message, drug_id, facility_id, status) VALUES ('facility',$1,'low_stock','sms',$2,$3,$1,'sent')`,
-      [facilityId, messages.lowStock(prev.drug_name, updated.quantity, prev.unit), prev.drug_id]
-    );
+    notifyFacilityStaff({
+      facilityId,
+      drugId: prev.drug_id,
+      type: "low_stock",
+      emailFn: templates.lowStock(prev.drug_name, updated.quantity, prev.unit),
+    }).catch(() => {});
   }
 
-  // Out of stock alert to facility
+  // Out-of-stock email alert to facility staff
   if (updated.status === "out_of_stock" && prev.status !== "out_of_stock") {
-    await sendSMS(fac.phone, messages.outOfStock(prev.drug_name));
+    notifyFacilityStaff({
+      facilityId,
+      drugId: prev.drug_id,
+      type: "out_of_stock",
+      emailFn: templates.outOfStock(prev.drug_name),
+    }).catch(() => {});
   }
 
   // Notify watching patients when drug comes back in stock (FR 4.2)
   if (updated.status === "in_stock" && prev.status === "out_of_stock") {
-    await notifyWatchingPatients({ facilityId, facilityName:fac.name, drugId:prev.drug_id });
+    notifyWatchingPatients({ facilityId, facilityName:fac.name, drugId:prev.drug_id }).catch(() => {});
   }
 
   return updated;
@@ -97,12 +102,31 @@ const writeAuditLog = async ({ inventoryId, facilityId, drugId, staffId, prevQty
   );
 };
 
+// Emails every active staff member on file for a facility (facilities don't
+// have their own email address — only the staff accounts tied to them do).
+const notifyFacilityStaff = async ({ facilityId, drugId, type, emailFn }) => {
+  const staff = await pool.query(
+    "SELECT email FROM facility_staff WHERE facility_id = $1 AND is_active = TRUE AND email IS NOT NULL",
+    [facilityId]
+  );
+  const { subject, html } = emailFn;
+
+  for (const s of staff.rows) {
+    sendEmail(s.email, subject, html).catch(() => {});
+  }
+
+  await pool.query(
+    `INSERT INTO notifications (recipient_type, recipient_id, type, channel, message, drug_id, facility_id, status, sent_at) VALUES ('facility',$1,$2,'email',$3,$4,$1,'sent',NOW())`,
+    [facilityId, type, subject, drugId]
+  );
+};
+
 const notifyWatchingPatients = async ({ facilityId, facilityName, drugId }) => {
   const watchers = await pool.query(
-    `SELECT wl.user_id, wl.radius_km, wl.user_lat, wl.user_lng, u.phone,
+    `SELECT wl.user_id, wl.radius_km, wl.user_lat, wl.user_lng, u.email,
             ST_Distance(f.location, ST_GeogFromText('SRID=4326;POINT(' || wl.user_lng || ' ' || wl.user_lat || ')')) AS distance_m
      FROM watch_list wl JOIN users u ON u.id=wl.user_id JOIN facilities f ON f.id=$1
-     WHERE wl.drug_id=$2 AND wl.is_active=TRUE AND u.is_active=TRUE AND wl.user_lat IS NOT NULL`,
+     WHERE wl.drug_id=$2 AND wl.is_active=TRUE AND u.is_active=TRUE AND wl.user_lat IS NOT NULL AND u.email IS NOT NULL`,
     [facilityId, drugId]
   );
   const drug = await pool.query("SELECT name_en FROM drugs WHERE id = $1", [drugId]);
@@ -111,11 +135,11 @@ const notifyWatchingPatients = async ({ facilityId, facilityName, drugId }) => {
   for (const watcher of watchers.rows) {
     const distKm = parseFloat((watcher.distance_m / 1000).toFixed(1));
     if (watcher.distance_m > watcher.radius_km * 1000) continue;
-    const msg = messages.drugAvailable(drugName, facilityName, distKm);
-    await sendSMS(watcher.phone, msg);
+    const { subject, html } = templates.drugAvailable(drugName, facilityName, distKm);
+    sendEmail(watcher.email, subject, html).catch(() => {});
     await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, type, channel, message, drug_id, facility_id, status, sent_at) VALUES ('patient',$1,'available','sms',$2,$3,$4,'sent',NOW())`,
-      [watcher.user_id, msg, drugId, facilityId]
+      `INSERT INTO notifications (recipient_type, recipient_id, type, channel, message, drug_id, facility_id, status, sent_at) VALUES ('patient',$1,'available','email',$2,$3,$4,'sent',NOW())`,
+      [watcher.user_id, subject, drugId, facilityId]
     );
   }
 };

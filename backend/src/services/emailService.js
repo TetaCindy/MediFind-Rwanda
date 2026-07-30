@@ -67,6 +67,42 @@ const templates = {
       </div>
     `,
   }),
+
+  drugAvailable: (drugName, facilityName, distanceKm) => ({
+    subject: `${drugName} is now available near you`,
+    html: `
+      <div style="font-family:Georgia,serif;max-width:420px;margin:0 auto;padding:24px;">
+        <h2 style="color:#0F6E56;">MediFind Rwanda</h2>
+        <p><b>${drugName}</b> is now in stock at:</p>
+        <p style="font-size:18px;font-weight:700;color:#1D9E75;">${facilityName}</p>
+        <p style="color:#5F5E5A;font-size:13px;">${distanceKm} km away from your last known location.</p>
+        <p style="color:#5F5E5A;font-size:13px;">Open MediFind Rwanda for directions and contact details.</p>
+      </div>
+    `,
+  }),
+
+  lowStock: (drugName, quantity, unit) => ({
+    subject: `Low stock alert: ${drugName}`,
+    html: `
+      <div style="font-family:Georgia,serif;max-width:420px;margin:0 auto;padding:24px;">
+        <h2 style="color:#BA7517;">MediFind Rwanda — Low Stock</h2>
+        <p><b>${drugName}</b> is running low at your facility.</p>
+        <p style="font-size:18px;font-weight:700;color:#BA7517;">${quantity} ${unit} remaining</p>
+        <p style="color:#5F5E5A;font-size:13px;">Please restock soon to avoid running out.</p>
+      </div>
+    `,
+  }),
+
+  outOfStock: (drugName) => ({
+    subject: `Out of stock: ${drugName}`,
+    html: `
+      <div style="font-family:Georgia,serif;max-width:420px;margin:0 auto;padding:24px;">
+        <h2 style="color:#A32D2D;">MediFind Rwanda — Out of Stock</h2>
+        <p><b>${drugName}</b> is now out of stock at your facility.</p>
+        <p style="color:#5F5E5A;font-size:13px;">Update your inventory once restocked so patients can find it again.</p>
+      </div>
+    `,
+  }),
 };
 
 module.exports = { sendEmail, templates };
