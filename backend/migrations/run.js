@@ -17,9 +17,9 @@ async function run() {
   const sql = fs.readFileSync(sqlFile, "utf8");
   try {
     await pool.query(sql);
-    console.log("✅  Schema migration complete.");
+    console.log("Schema migration complete.");
   } catch (err) {
-    console.error("❌  Migration failed:", err.message);
+    console.error("Migration failed:", err.message);
   } finally {
     await pool.end();
   }

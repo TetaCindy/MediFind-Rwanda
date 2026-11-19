@@ -17,9 +17,9 @@ async function run() {
   const sql = fs.readFileSync(sqlFile, "utf8");
   try {
     await pool.query(sql);
-    console.log("✅  Seed data inserted.");
+    console.log("Seed data inserted.");
   } catch (err) {
-    console.error("❌  Seeding failed:", err.message);
+    console.error("Seeding failed:", err.message);
   } finally {
     await pool.end();
   }

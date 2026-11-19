@@ -1,8 +1,6 @@
-// ─────────────────────────────────────────────────────────────────────────────
-//  MediFind Rwanda — MTN SMS v3 Service
-//  Token URL:  https://api.mtn.com/v1/oauth/access_token/accesstoken
-//  SMS URL:    https://api.mtn.com/v3/sms/outbound
-// ─────────────────────────────────────────────────────────────────────────────
+// MTN SMS v3 service
+// Token URL:  https://api.mtn.com/v1/oauth/access_token/accesstoken
+// SMS URL:    https://api.mtn.com/v3/sms/outbound
 require("dotenv").config();
 
 const TOKEN_URL = "https://api.mtn.com/v1/oauth/access_token/accesstoken?grant_type=client_credentials";
@@ -11,7 +9,7 @@ const API_KEY   = process.env.MTN_API_KEY;
 const API_SECRET= process.env.MTN_API_SECRET;
 const SENDER_ID = process.env.SMS_SENDER_ID || "MediFind";
 
-// ── Get OAuth token from MTN ──────────────────────────────────────────────────
+// Get OAuth token from MTN
 const getAccessToken = async () => {
   const credentials = Buffer.from(`${API_KEY}:${API_SECRET}`).toString("base64");
 
@@ -33,11 +31,11 @@ const getAccessToken = async () => {
   return data.access_token;
 };
 
-// ── Send SMS ──────────────────────────────────────────────────────────────────
+// Send SMS
 const sendSMS = async (to, message) => {
-  // Development mode — log only, no real SMS
+  // Development mode: log only, no real SMS
   if (process.env.NODE_ENV !== "production") {
-    console.log(`📱 [SMS - DEV MODE]`);
+    console.log(`[SMS - DEV MODE]`);
     console.log(`   To:      ${to}`);
     console.log(`   Message: ${message}`);
     return { status: "dev_logged", to, message };
@@ -46,7 +44,7 @@ const sendSMS = async (to, message) => {
   try {
     const token = await getAccessToken();
 
-    // Format phone: remove spaces and +  e.g. +250788123456 → 250788123456
+    // Format phone: remove spaces and +  e.g. +250788123456 -> 250788123456
     const phone = to.replace(/\s+/g, "").replace("+", "");
 
     const res = await fetch(SMS_URL, {
@@ -69,17 +67,17 @@ const sendSMS = async (to, message) => {
       throw new Error(`MTN SMS error: ${JSON.stringify(data)}`);
     }
 
-    console.log(`✅ SMS sent to ${to}`);
+    console.log(`SMS sent to ${to}`);
     return { status: "sent", data };
 
   } catch (err) {
     // Never crash the app if SMS fails
-    console.error(`❌ SMS failed to ${to}:`, err.message);
+    console.error(`SMS failed to ${to}:`, err.message);
     return { status: "failed", error: err.message };
   }
 };
 
-// ── Message templates ─────────────────────────────────────────────────────────
+// Message templates
 const messages = {
   otp: (code) =>
     `Your MediFind Rwanda code is: ${code}. Valid for 10 minutes. Do not share this code.`,

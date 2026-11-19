@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 
-// ── Verify any valid JWT ──────────────────────────────────────────────────────
+// Verify any valid JWT
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -17,7 +17,7 @@ const authenticate = (req, res, next) => {
   }
 };
 
-// ── Role guards ───────────────────────────────────────────────────────────────
+// Role guards
 const requireAdmin = (req, res, next) => {
   if (req.user?.role !== "admin") {
     return res.status(403).json({ error: "Admin access required." });
